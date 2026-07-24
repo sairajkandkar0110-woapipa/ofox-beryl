@@ -1,4 +1,4 @@
-name: Max Speed DTBO Extractor & Decompiler
+name: Max Speed DTBO Extractor & Release Uploader
 
 on:
   workflow_dispatch:
@@ -8,16 +8,20 @@ on:
         required: true
         default: 'https://bn.d.miui.com/OS2.0.14.0.UMZINXM/pipa_in_global-ota_full-OS2.0.14.0.UMZINXM-user-14.0-00783b8e7f.zip'
 
+# CRITICAL: This grants the workflow permission to create a Release in your repo
+permissions:
+  contents: write
+
 jobs:
-  dtbo-decompile:
-    name: Download, Extract & Decompile DTBO
+  dtbo-decompile-release:
+    name: Download, Extract, Scan & Release
     runs-on: ubuntu-22.04
     steps:
       - name: Install Utilities
         run: |
-          echo "Installing aria2c and dtc..."
+          echo "Installing aria2c, dtc, and zip..."
           sudo apt-get update -y
-          sudo apt-get install -y aria2 device-tree-compiler python3 git
+          sudo apt-get install -y aria2 device-tree-compiler python3 git zip
 
       - name: Download ROM & Extract dtbo.img
         run: |
@@ -51,32 +55,40 @@ jobs:
           mkdir -p dts_files
           for file in dtbo_blobs/*; do
             filename=$(basename "$file")
-            # Decompile and suppress warnings since overlays often lack base references
             dtc -I dtb -O dts -o "dts_files/${filename}.dts" "$file" 2>/dev/null || true
           done
 
-      - name: Auto-Scan for Novatek GPIO Pins
+      - name: Trace Parent SPI Bus Target & Package Files
         run: |
           echo "=================================================="
-          echo "    NOVATEK TOUCHSCREEN PIN SCANNER               "
+          echo "    SPI BUS PARENT TRACER & ZIPPER                "
           echo "=================================================="
           
-          # Search specifically for the SPI bus identifier and print the whole block
-          grep -iE -A 40 -B 5 "novatek,NVT-ts-spi|novatek@0" dts_files/*.dts > novatek_hardware_pins.txt || true
+          # Trace the target
+          grep -iE -B 20 "novatek@0 \{" dts_files/*.dts > spi_target_trace.txt || true
           
-          if [ -s novatek_hardware_pins.txt ]; then
-            echo "[+] Novatek hardware block with integers found! Here are the pins:"
-            echo "--------------------------------------------------"
-            cat novatek_hardware_pins.txt
-            echo "--------------------------------------------------"
-          else
-            echo "[-] Auto-scan didn't catch the integer block. Please check the artifact manually."
-          fi
+          # Print the trace to the log for quick reading
+          cat spi_target_trace.txt || true
+          
+          # Zip all the DTS files and the text trace into a single archive for the release
+          echo "Zipping files for GitHub Release..."
+          zip -r pipa_decompiled_dtbos.zip dts_files/ spi_target_trace.txt
 
-      - name: Upload DTBO Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Pipa-Decompiled-DTBOs
-          path: |
-            dts_files/
-            novatek_hardware_pins.txt
+          # Automatically generates a unique tag based on the run number (e.g., dtbo-scan-15)
+          tag_name: dtbo-scan-${{ github.run_number }}
+          name: "Touchscreen DTBO Scan #${{ github.run_number }}"
+          body: |
+            Automated extraction and decompilation of DTBO overlays for Xiaomi Pad 6 (`pipa`).
+            
+            **Source ROM Used:**
+            ${{ github.event.inputs.rom_url }}
+            
+            **Contents:**
+            - `pipa_decompiled_dtbos.zip`: Contains all individual `.dts` overlay files.
+            - `spi_target_trace.txt`: The targeted log searching for the Novatek SPI parent bus.
+          files: |
+            pipa_decompiled_dtbos.zip
+            spi_target_trace.txt
