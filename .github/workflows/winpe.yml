@@ -1,0 +1,51 @@
+name: Build WinPE from ESD for Xiaomi Pad 6
+
+on:
+  workflow_dispatch:
+    inputs:
+      esd_url:
+        description: 'Direct Download URL for Windows 11 ARM64 .esd file'
+        required: true
+
+jobs:
+  build-winpe:
+    runs-on: windows-11-arm64
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download and Convert ESD to WIM
+        shell: pwsh
+        run: |
+          $esdUrl = "${{ github.event.inputs.esd_url }}"
+          $esdPath = "$env:TEMP\install.esd"
+          $wimPath = "$env:TEMP\install.wim"
+          
+          Write-Host "Downloading ESD file..."
+          Invoke-WebRequest -Uri $esdUrl -OutFile $esdPath
+          
+          Write-Host "Checking indexes inside ESD..."
+          dism /Get-WimInfo /WimFile:$esdPath
+          
+          Write-Host "Converting/Exporting ESD to standard WIM format..."
+          # Index 1 is typically Windows Home/Pro depending on the ESD, change if needed
+          dism /export-image /SourceImageFile:$esdPath /SourceIndex:1 /DestinationImageFile:$wimPath /Compress:max /CheckIntegrity
+
+          Write-Host "Conversion complete: $wimPath"
+
+      - name: Package Result
+        shell: pwsh
+        run: |
+          $wimPath = "$env:TEMP\install.wim"
+          Compress-Archive -Path $wimPath -DestinationPath "$env:TEMP\XiaomiPad6_Windows.zip"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-build-${{ github.run_number }}
+          name: "Xiaomi Pad 6 Windows Image Build #${{ github.run_number }}"
+          body: "Automated cloud conversion of direct ESD source file for Windows on ARM."
+          files: |
+            C:/Users/runneradmin/AppData/Local/Temp/XiaomiPad6_Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
