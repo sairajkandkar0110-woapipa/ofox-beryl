@@ -34,12 +34,9 @@ jobs:
         run: |
           zip -9 xiaomi_pad6_windows.zip output.wim
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: windows-linux-build-${{ github.run_number }}
-          name: "Xiaomi Pad 6 Windows Image (Build #${{ github.run_number }})"
-          body: "Processed via automated Linux GitHub Action using wimlib."
-          files: xiaomi_pad6_windows.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: xiaomi-pad6-windows-image
+          path: xiaomi_pad6_windows.zip
+          compression-level: 9
