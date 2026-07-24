@@ -16,7 +16,7 @@ jobs:
         run: |
           echo "Installing aria2c (multi-thread downloader) and Device Tree Compiler..."
           sudo apt-get update -y
-          sudo apt-get install -y aria2 device-tree-compiler python3
+          sudo apt-get install -y aria2 device-tree-compiler python3 git
 
       - name: Targeted Download and Extraction
         run: |
@@ -32,7 +32,6 @@ jobs:
             
           elif [[ "$ROM_URL" == *.zip ]]; then
             echo "Recovery ROM detected (.zip). Downloading..."
-            # Saving strictly as rom.zip so payload-dumper-go detects the ZIP structure
             aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
             
             echo "Setting up payload-dumper-go..."
@@ -57,17 +56,17 @@ jobs:
 
       - name: Unpack boot.img and Isolate DTB
         run: |
-          echo "Fetching Android boot image unpacker..."
-          wget -q https://raw.githubusercontent.com/cfig/Android_boot_image_editor/master/unpack_bootimg.py
-          chmod +x unpack_bootimg.py
+          echo "Fetching official Google mkbootimg repository..."
+          git clone -q https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg_tools
           
           echo "Unpacking boot image headers and payloads..."
-          python3 unpack_bootimg.py --boot_img boot.img
+          mkdir -p out
+          python3 mkbootimg_tools/unpack_bootimg.py --boot_img boot.img --out out
           
-          if [ -f "boot.img-dtb" ]; then
-            mv boot.img-dtb extracted.dtb
-          elif [ -f "out/dtb" ]; then
+          if [ -f "out/dtb" ]; then
             mv out/dtb extracted.dtb
+          elif [ -f "out/boot.img-dtb" ]; then
+            mv out/boot.img-dtb extracted.dtb
           else
             echo "Error: DTB payload not found!"
             exit 1
