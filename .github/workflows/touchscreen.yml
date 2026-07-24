@@ -38,13 +38,12 @@ jobs:
 
       - name: Split DTBO Container
         run: |
-          echo "Fetching Android's official mkdtboimg.py tool..."
-          wget -q https://raw.githubusercontent.com/aosp-mirror/platform_system_libufdt/master/utils/src/mkdtboimg.py
-          chmod +x mkdtboimg.py
+          echo "Fetching official Google libufdt repository..."
+          git clone -q https://android.googlesource.com/platform/system/libufdt
           
           echo "Splitting dtbo.img into individual overlay blobs..."
           mkdir -p dtbo_blobs
-          python3 mkdtboimg.py dump dtbo.img -b dtbo_blobs/overlay_
+          python3 libufdt/utils/src/mkdtboimg.py dump dtbo.img -b dtbo_blobs/overlay_
 
       - name: Decompile Overlays to DTS
         run: |
