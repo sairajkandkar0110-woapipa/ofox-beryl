@@ -18,32 +18,29 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y aria2 device-tree-compiler python3
 
-      - name: Multi-Threaded ROM Download
-        run: |
-          echo "Downloading ROM using 16 concurrent threads..."
-          ROM_URL="${{ github.event.inputs.rom_url }}"
-          
-          # We save the download as "rom.file" to handle both .zip and .tgz smoothly
-          aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.file
-
-      - name: Targeted Extraction (boot.img only)
+      - name: Targeted Download and Extraction
         run: |
           ROM_URL="${{ github.event.inputs.rom_url }}"
           
           if [[ "$ROM_URL" == *.tgz ]] || [[ "$ROM_URL" == *.tar.gz ]]; then
-            echo "Fastboot ROM detected. Ripping out boot.img directly from archive..."
-            tar -xf rom.file --wildcards '*/boot.img'
+            echo "Fastboot ROM detected (.tgz). Downloading..."
+            aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.tgz
+            
+            echo "Ripping out boot.img directly from TGZ..."
+            tar -xf rom.tgz --wildcards '*/boot.img'
             find . -name "boot.img" -exec mv {} ./boot.img \;
             
           elif [[ "$ROM_URL" == *.zip ]]; then
-            echo "Recovery ROM (.zip) detected. Setting up payload-dumper-go..."
-            # GitHub's Ubuntu runner comes with Go pre-installed, so we can compile the dumper instantly
+            echo "Recovery ROM detected (.zip). Downloading..."
+            # Saving strictly as rom.zip so payload-dumper-go detects the ZIP structure
+            aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
+            
+            echo "Setting up payload-dumper-go..."
             go install github.com/ssut/payload-dumper-go@latest
             export PATH=$PATH:$(go env GOPATH)/bin
             
-            echo "Extracting only boot.img from the payload inside the ZIP..."
-            # -p boot tells the tool to strictly target the boot partition and ignore the rest
-            payload-dumper-go -p boot rom.file
+            echo "Extracting boot.img from payload.bin inside rom.zip..."
+            payload-dumper-go -p boot rom.zip
             
             echo "Moving boot.img to root workspace..."
             find extracted_* -name "boot.img" -exec mv {} ./boot.img \;
