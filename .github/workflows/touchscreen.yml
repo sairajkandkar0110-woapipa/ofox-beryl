@@ -19,7 +19,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y aria2 device-tree-compiler python3 git
 
-      - name: Targeted Download and Extraction
+      - name: Targeted Download and Extraction (vendor_boot)
         run: |
           ROM_URL="${{ github.event.inputs.rom_url }}"
           
@@ -27,9 +27,9 @@ jobs:
             echo "Fastboot ROM detected (.tgz). Downloading..."
             aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.tgz
             
-            echo "Ripping out boot.img directly from TGZ..."
-            tar -xf rom.tgz --wildcards '*/boot.img'
-            find . -name "boot.img" -exec mv {} ./boot.img \;
+            echo "Ripping out vendor_boot.img directly from TGZ..."
+            tar -xf rom.tgz --wildcards '*/vendor_boot.img'
+            find . -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
             
           elif [[ "$ROM_URL" == *.zip ]]; then
             echo "Recovery ROM detected (.zip). Downloading..."
@@ -39,37 +39,37 @@ jobs:
             go install github.com/ssut/payload-dumper-go@latest
             export PATH=$PATH:$(go env GOPATH)/bin
             
-            echo "Extracting boot.img from payload.bin inside rom.zip..."
-            payload-dumper-go -p boot rom.zip
+            echo "Extracting vendor_boot.img from payload.bin inside rom.zip..."
+            payload-dumper-go -p vendor_boot rom.zip
             
-            echo "Moving boot.img to root workspace..."
-            find extracted_* -name "boot.img" -exec mv {} ./boot.img \;
+            echo "Moving vendor_boot.img to root workspace..."
+            find extracted_* -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
             
           else
             echo "Error: Unsupported URL format. Must end in .tgz, .tar.gz, or .zip"
             exit 1
           fi
           
-          if [ ! -f "boot.img" ]; then
-            echo "Error: boot.img not found!"
+          if [ ! -f "vendor_boot.img" ]; then
+            echo "Error: vendor_boot.img not found!"
             exit 1
           fi
 
-      - name: Unpack boot.img and Isolate DTB
+      - name: Unpack vendor_boot.img and Isolate DTB
         run: |
           echo "Fetching official Google mkbootimg repository..."
           git clone -q https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg_tools
           
-          echo "Unpacking boot image headers and payloads..."
+          echo "Unpacking vendor boot image headers and payloads..."
           mkdir -p out
-          python3 mkbootimg_tools/unpack_bootimg.py --boot_img boot.img --out out
+          python3 mkbootimg_tools/unpack_bootimg.py --boot_img vendor_boot.img --out out
           
           if [ -f "out/dtb" ]; then
             mv out/dtb extracted.dtb
-          elif [ -f "out/boot.img-dtb" ]; then
-            mv out/boot.img-dtb extracted.dtb
+          elif [ -f "out/vendor_boot.img-dtb" ]; then
+            mv out/vendor_boot.img-dtb extracted.dtb
           else
-            echo "Error: DTB payload not found!"
+            echo "Error: DTB payload not found inside vendor_boot!"
             exit 1
           fi
 
