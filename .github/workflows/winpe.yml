@@ -1,4 +1,4 @@
-name: Build Windows Image from ESD (Linux)
+name: Build Windows Image to IMG (Linux)
 
 on:
   workflow_dispatch:
@@ -8,35 +8,47 @@ on:
         required: true
 
 jobs:
-  build-linux:
+  build-img:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install wimtools
+      - name: Install wimtools and utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y wimtools
+          sudo apt-get install -y wimtools parted dosfstools
 
-      - name: Download and Convert ESD
+      - name: Download and Convert ESD to WIM
         run: |
           echo "Downloading ESD file..."
           wget -O input.esd "${{ github.event.inputs.esd_url }}"
           
-          echo "Checking available indexes inside ESD..."
-          wiminfo input.esd
-          
-          echo "Converting ESD index 1 to WIM format..."
+          echo "Converting ESD index 1 to WIM..."
           wimexport input.esd 1 output.wim --compress=maximum
 
-      - name: Archive Processed Image
+      - name: Package into a Raw Disk Image (.img)
         run: |
+          # Create a blank raw image container (e.g., sized to fit the WIM, adjust if needed)
+          # Here we create an empty 8GB raw image file
+          fallocate -l 8G xiaomi_pad6_windows.img
+          
+          # Setup loop device or format as NTFS/FAT32 depending on your target layout
+          # Alternatively, wrap the WIM inside a clean disk structure or raw container:
+          mkfs.ntfs -f -L "WIN_ARM64" xiaomi_pad6_windows.img
+          
+          # Or if you just want the raw file packed neatly with a .img extension:
+          # mv output.wim xiaomi_pad6_windows.img
+
+          # Let's use a zip wrapper around the final .img file to keep file size small for downloading
           zip -9 xiaomi_pad6_windows.zip output.wim
+          
+          # Renaming output to .img directly if your deployment tool expects an raw image container:
+          cp output.wim xiaomi_pad6_windows.img
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xiaomi-pad6-windows-image
-          path: xiaomi_pad6_windows.zip
+          name: xiaomi-pad6-windows-img
+          path: xiaomi_pad6_windows.img
           compression-level: 9
