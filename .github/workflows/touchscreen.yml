@@ -84,9 +84,10 @@ jobs:
           echo "    AUTOMATIC TOUCHSCREEN HARDWARE SCAN           "
           echo "=================================================="
           
-          echo "Searching for I2C/SPI touch controllers (Novatek, Goodix, Focaltech, Synaptics, etc.)..."
+          echo "Searching for Novatek NT36532 and other specific controllers..."
           
-          grep -iE -A 35 -B 5 "touchscreen|goodix|novatek|focaltech|synaptics|fts|ts@" pipa-device-tree.dts > touch_results.txt || true
+          # Highly specific regex to avoid 'stats@' and specifically target the Novatek controller
+          grep -iE -A 40 -B 5 "nt36|novatek|touchscreen@" pipa-device-tree.dts > touch_results.txt || true
           
           if [ -s touch_results.txt ]; then
             echo "[+] Touchscreen data found! Here are the hardware coordinates to use in your ACPI tables:"
@@ -94,6 +95,5 @@ jobs:
             cat touch_results.txt
             echo "--------------------------------------------------"
           else
-            echo "[-] Could not automatically find standard touchscreen keywords."
-            echo "You may need to manually search the .dts file for the 'spi' or 'i2c' bus sections."
+            echo "[-] Could not automatically find the touchscreen keywords."
           fi
