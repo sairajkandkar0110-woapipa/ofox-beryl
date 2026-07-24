@@ -6,6 +6,7 @@ on:
       rom_url:
         description: 'Direct link to Xiaomi Pad 6 ROM (.tgz or .zip)'
         required: true
+        default: 'https://bn.d.miui.com/OS2.0.14.0.UMZINXM/pipa_in_global-ota_full-OS2.0.14.0.UMZINXM-user-14.0-00783b8e7f.zip'
 
 jobs:
   fast-dtb-scan:
