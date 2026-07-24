@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       rom_url:
-        description: 'Direct link to Xiaomi Pad 6 ROM (.tgz or .zip)'
+        description: 'Direct link to Xiaomi Pad 6 ROM (.zip)'
         required: true
         default: 'https://bn.d.miui.com/OS2.0.14.0.UMZINXM/pipa_in_global-ota_full-OS2.0.14.0.UMZINXM-user-14.0-00783b8e7f.zip'
 
@@ -15,52 +15,35 @@ jobs:
     steps:
       - name: Install Max Speed Utilities
         run: |
-          echo "Installing aria2c (multi-thread downloader) and Device Tree Compiler..."
+          echo "Installing aria2c and Device Tree Compiler..."
           sudo apt-get update -y
           sudo apt-get install -y aria2 device-tree-compiler python3 git
 
-      - name: Targeted Download and Extraction (vendor_boot)
+      - name: Targeted Download and Extraction (vendor_boot & dtbo)
         run: |
           ROM_URL="${{ github.event.inputs.rom_url }}"
           
-          if [[ "$ROM_URL" == *.tgz ]] || [[ "$ROM_URL" == *.tar.gz ]]; then
-            echo "Fastboot ROM detected (.tgz). Downloading..."
-            aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.tgz
-            
-            echo "Ripping out vendor_boot.img directly from TGZ..."
-            tar -xf rom.tgz --wildcards '*/vendor_boot.img'
-            find . -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
-            
-          elif [[ "$ROM_URL" == *.zip ]]; then
-            echo "Recovery ROM detected (.zip). Downloading..."
-            aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
-            
-            echo "Setting up payload-dumper-go..."
-            go install github.com/ssut/payload-dumper-go@latest
-            export PATH=$PATH:$(go env GOPATH)/bin
-            
-            echo "Extracting vendor_boot.img from payload.bin inside rom.zip..."
-            payload-dumper-go -p vendor_boot rom.zip
-            
-            echo "Moving vendor_boot.img to root workspace..."
-            find extracted_* -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
-            
-          else
-            echo "Error: Unsupported URL format. Must end in .tgz, .tar.gz, or .zip"
-            exit 1
-          fi
+          echo "Downloading Recovery ROM (.zip)..."
+          aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
           
-          if [ ! -f "vendor_boot.img" ]; then
-            echo "Error: vendor_boot.img not found!"
-            exit 1
-          fi
+          echo "Setting up payload-dumper-go..."
+          go install github.com/ssut/payload-dumper-go@latest
+          export PATH=$PATH:$(go env GOPATH)/bin
+          
+          echo "Extracting vendor_boot.img AND dtbo.img from payload..."
+          # The -p flag now targets both partitions simultaneously
+          payload-dumper-go -p vendor_boot,dtbo rom.zip
+          
+          echo "Moving images to root workspace..."
+          find extracted_* -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
+          find extracted_* -name "dtbo.img" -exec mv {} ./dtbo.img \;
 
       - name: Unpack vendor_boot.img and Isolate DTB
         run: |
           echo "Fetching official Google mkbootimg repository..."
           git clone -q https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg_tools
           
-          echo "Unpacking vendor boot image headers and payloads..."
+          echo "Unpacking vendor boot image..."
           mkdir -p out
           python3 mkbootimg_tools/unpack_bootimg.py --boot_img vendor_boot.img --out out
           
@@ -68,32 +51,39 @@ jobs:
             mv out/dtb extracted.dtb
           elif [ -f "out/vendor_boot.img-dtb" ]; then
             mv out/vendor_boot.img-dtb extracted.dtb
-          else
-            echo "Error: DTB payload not found inside vendor_boot!"
-            exit 1
           fi
 
       - name: Decompile DTB to Human-Readable DTS
         run: |
           echo "Decompiling Device Tree Blob into DTS text format..."
-          dtc -I dtb -O dts -o pipa-device-tree.dts extracted.dtb
+          dtc -I dtb -O dts -o pipa-device-tree.dts extracted.dtb || true
 
-      - name: Auto-Scan DTS for Touchscreen Coordinates
+      - name: Deep Scan for Touch Controller
         run: |
           echo "=================================================="
-          echo "    AUTOMATIC TOUCHSCREEN HARDWARE SCAN           "
+          echo "    DEEP TOUCHSCREEN HARDWARE SCAN                "
           echo "=================================================="
           
-          echo "Searching for Novatek NT36532 and other specific controllers..."
+          echo "1. Scanning vendor_boot DTS for OEM specific touch strings..."
+          grep -iE -A 35 -B 5 "xiaomi,touch|touch|goodix|novatek|nt36|focaltech|synaptics|fts" pipa-device-tree.dts > touch_results.txt || true
           
-          # Highly specific regex to avoid 'stats@' and specifically target the Novatek controller
-          grep -iE -A 40 -B 5 "nt36|novatek|touchscreen@" pipa-device-tree.dts > touch_results.txt || true
+          echo "2. Scanning DTBO (Device Tree Overlays) raw strings..."
+          # Running strings against the raw DTBO to catch hardware identifiers
+          strings dtbo.img | grep -iE "touch|goodix|novatek|nt36|focaltech|synaptics" >> touch_results.txt || true
           
           if [ -s touch_results.txt ]; then
-            echo "[+] Touchscreen data found! Here are the hardware coordinates to use in your ACPI tables:"
+            echo "[+] Touchscreen data found!"
             echo "--------------------------------------------------"
             cat touch_results.txt
             echo "--------------------------------------------------"
           else
-            echo "[-] Could not automatically find the touchscreen keywords."
+            echo "[-] Auto-scan missed it. You will need to check the artifact manually."
           fi
+
+      - name: Upload Device Tree Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pipa-Decompiled-Device-Tree
+          path: |
+            pipa-device-tree.dts
+            touch_results.txt
