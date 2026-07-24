@@ -1,4 +1,4 @@
-name: Max Speed DTB Extractor & Touchscreen Scanner
+name: Max Speed DTBO Extractor & Decompiler
 
 on:
   workflow_dispatch:
@@ -9,81 +9,75 @@ on:
         default: 'https://bn.d.miui.com/OS2.0.14.0.UMZINXM/pipa_in_global-ota_full-OS2.0.14.0.UMZINXM-user-14.0-00783b8e7f.zip'
 
 jobs:
-  fast-dtb-scan:
-    name: Download, Extract & Scan DTB
+  dtbo-decompile:
+    name: Download, Extract & Decompile DTBO
     runs-on: ubuntu-22.04
     steps:
-      - name: Install Max Speed Utilities
+      - name: Install Utilities
         run: |
-          echo "Installing aria2c and Device Tree Compiler..."
+          echo "Installing aria2c and dtc..."
           sudo apt-get update -y
           sudo apt-get install -y aria2 device-tree-compiler python3 git
 
-      - name: Targeted Download and Extraction (vendor_boot & dtbo)
+      - name: Download ROM & Extract dtbo.img
         run: |
           ROM_URL="${{ github.event.inputs.rom_url }}"
           
-          echo "Downloading Recovery ROM (.zip)..."
+          echo "Downloading Recovery ROM..."
           aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
           
           echo "Setting up payload-dumper-go..."
           go install github.com/ssut/payload-dumper-go@latest
           export PATH=$PATH:$(go env GOPATH)/bin
           
-          echo "Extracting vendor_boot.img AND dtbo.img from payload..."
-          # The -p flag now targets both partitions simultaneously
-          payload-dumper-go -p vendor_boot,dtbo rom.zip
+          echo "Extracting ONLY dtbo.img to save time..."
+          payload-dumper-go -p dtbo rom.zip
           
-          echo "Moving images to root workspace..."
-          find extracted_* -name "vendor_boot.img" -exec mv {} ./vendor_boot.img \;
+          echo "Moving dtbo.img to root workspace..."
           find extracted_* -name "dtbo.img" -exec mv {} ./dtbo.img \;
 
-      - name: Unpack vendor_boot.img and Isolate DTB
+      - name: Split DTBO Container
         run: |
-          echo "Fetching official Google mkbootimg repository..."
-          git clone -q https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg_tools
+          echo "Fetching Android's official mkdtboimg.py tool..."
+          wget -q https://raw.githubusercontent.com/aosp-mirror/platform_system_libufdt/master/utils/src/mkdtboimg.py
+          chmod +x mkdtboimg.py
           
-          echo "Unpacking vendor boot image..."
-          mkdir -p out
-          python3 mkbootimg_tools/unpack_bootimg.py --boot_img vendor_boot.img --out out
-          
-          if [ -f "out/dtb" ]; then
-            mv out/dtb extracted.dtb
-          elif [ -f "out/vendor_boot.img-dtb" ]; then
-            mv out/vendor_boot.img-dtb extracted.dtb
-          fi
+          echo "Splitting dtbo.img into individual overlay blobs..."
+          mkdir -p dtbo_blobs
+          python3 mkdtboimg.py dump dtbo.img -b dtbo_blobs/overlay_
 
-      - name: Decompile DTB to Human-Readable DTS
+      - name: Decompile Overlays to DTS
         run: |
-          echo "Decompiling Device Tree Blob into DTS text format..."
-          dtc -I dtb -O dts -o pipa-device-tree.dts extracted.dtb || true
+          echo "Decompiling each overlay into human-readable text..."
+          mkdir -p dts_files
+          for file in dtbo_blobs/*; do
+            filename=$(basename "$file")
+            # Decompile and suppress warnings since overlays often lack base references
+            dtc -I dtb -O dts -o "dts_files/${filename}.dts" "$file" 2>/dev/null || true
+          done
 
-      - name: Deep Scan for Touch Controller
+      - name: Auto-Scan for Novatek GPIO Pins
         run: |
           echo "=================================================="
-          echo "    DEEP TOUCHSCREEN HARDWARE SCAN                "
+          echo "    NOVATEK TOUCHSCREEN PIN SCANNER               "
           echo "=================================================="
           
-          echo "1. Scanning vendor_boot DTS for OEM specific touch strings..."
-          grep -iE -A 35 -B 5 "xiaomi,touch|touch|goodix|novatek|nt36|focaltech|synaptics|fts" pipa-device-tree.dts > touch_results.txt || true
+          # Search specifically for the SPI bus identifier and print the whole block
+          grep -iE -A 40 -B 5 "novatek,NVT-ts-spi|novatek@0" dts_files/*.dts > novatek_hardware_pins.txt || true
           
-          echo "2. Scanning DTBO (Device Tree Overlays) raw strings..."
-          # Running strings against the raw DTBO to catch hardware identifiers
-          strings dtbo.img | grep -iE "touch|goodix|novatek|nt36|focaltech|synaptics" >> touch_results.txt || true
-          
-          if [ -s touch_results.txt ]; then
-            echo "[+] Touchscreen data found!"
+          if [ -s novatek_hardware_pins.txt ]; then
+            echo "[+] Novatek hardware block with integers found! Here are the pins:"
             echo "--------------------------------------------------"
-            cat touch_results.txt
+            cat novatek_hardware_pins.txt
             echo "--------------------------------------------------"
           else
-            echo "[-] Auto-scan missed it. You will need to check the artifact manually."
+            echo "[-] Auto-scan didn't catch the integer block. Please check the artifact manually."
           fi
 
-      - name: Upload Device Tree Artifacts
+      - name: Upload DTBO Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Pipa-Decompiled-Device-Tree
+          name: Pipa-Decompiled-DTBOs
           path: |
-            pipa-device-tree.dts
-            touch_results.txt
+            dts_files/
+            novatek_hardware_pins.txt
