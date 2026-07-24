@@ -2,6 +2,10 @@ name: Max Speed DTB Extractor & Touchscreen Scanner
 
 on:
   workflow_dispatch:
+    inputs:
+      rom_url:
+        description: 'Direct link to Xiaomi Pad 6 Fastboot ROM (.tgz)'
+        required: true
 
 jobs:
   fast-dtb-scan:
@@ -17,14 +21,13 @@ jobs:
       - name: Multi-Threaded ROM Download
         run: |
           echo "Downloading Xiaomi Pad 6 Fastboot ROM using 16 concurrent threads..."
-          ROM_URL="https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/V14.0.4.0.TMZMIXM/pipa_global_images_V14.0.4.0.TMZMIXM_20230614.0000.00_13.0_global_8fb7b2339b.tgz"
+          ROM_URL="${{ github.event.inputs.rom_url }}"
           
           aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.tgz
 
       - name: Targeted Extraction (boot.img only)
         run: |
           echo "Bypassing full extraction. Ripping out only boot.img directly from the archive..."
-          # The wildcard ensures tar only pulls files ending in 'boot.img', skipping system and vendor images
           tar -xf rom.tgz --wildcards '*/boot.img'
           
           echo "Moving boot.img to root workspace..."
@@ -44,7 +47,6 @@ jobs:
           echo "Unpacking boot image headers and payloads..."
           python3 unpack_bootimg.py --boot_img boot.img
           
-          # Locate the device tree blob
           if [ -f "boot.img-dtb" ]; then
             mv boot.img-dtb extracted.dtb
           elif [ -f "out/dtb" ]; then
@@ -67,7 +69,6 @@ jobs:
           
           echo "Searching for I2C/SPI touch controllers (Novatek, Goodix, Focaltech, Synaptics, etc.)..."
           
-          # Grep will pull the matching keyword, plus the 5 lines before it and 35 lines after it to capture the entire hardware block (pins, bus address, resolution).
           grep -iE -A 35 -B 5 "touchscreen|goodix|novatek|focaltech|synaptics|fts|ts@" pipa-device-tree.dts > touch_results.txt || true
           
           if [ -s touch_results.txt ]; then
