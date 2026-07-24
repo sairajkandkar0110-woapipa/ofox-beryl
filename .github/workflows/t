@@ -1,0 +1,56 @@
+name: Final SPI Bus Locator
+
+on:
+  workflow_dispatch:
+    inputs:
+      rom_url:
+        description: 'Direct link to Xiaomi Pad 6 ROM (.zip)'
+        required: true
+        default: 'https://bn.d.miui.com/OS2.0.14.0.UMZINXM/pipa_in_global-ota_full-OS2.0.14.0.UMZINXM-user-14.0-00783b8e7f.zip'
+
+jobs:
+  isolate-spi-bus:
+    name: Isolate SPI Bus
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install Utilities
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y aria2 device-tree-compiler python3 git
+
+      - name: Download ROM & Extract dtbo.img
+        run: |
+          ROM_URL="${{ github.event.inputs.rom_url }}"
+          aria2c -x 16 -s 16 -j 16 -k 1M -V "$ROM_URL" -o rom.zip
+          
+          go install github.com/ssut/payload-dumper-go@latest
+          export PATH=$PATH:$(go env GOPATH)/bin
+          
+          payload-dumper-go -p dtbo rom.zip
+          find extracted_* -name "dtbo.img" -exec mv {} ./dtbo.img \;
+
+      - name: Split DTBO Container
+        run: |
+          git clone -q https://android.googlesource.com/platform/system/libufdt
+          mkdir -p dtbo_blobs
+          python3 libufdt/utils/src/mkdtboimg.py dump dtbo.img -b dtbo_blobs/overlay_
+
+      - name: Decompile Overlays to DTS
+        run: |
+          mkdir -p dts_files
+          for file in dtbo_blobs/*; do
+            filename=$(basename "$file")
+            dtc -I dtb -O dts -o "dts_files/${filename}.dts" "$file" 2>/dev/null || true
+          done
+
+      - name: Extract Exact SPI Controller Name
+        run: |
+          echo "=================================================="
+          echo "    FINAL SPI BUS REVELATION                      "
+          echo "=================================================="
+          
+          # The -h flag hides the filename so you only see the clean variable
+          grep -h "fragment@121:target:0" dts_files/*.dts || echo "Not found in this run."
+          
+          echo "=================================================="
+          echo "Look at the word right before the equals sign!"
