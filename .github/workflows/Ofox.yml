@@ -87,7 +87,7 @@ jobs:
           repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all) external/guava external/gflags
         fi
 
-    - name: Move Device Tree & Rename Omni/Fox Makefiles to twrp_beryl.mk
+    - name: Move Device Tree & Normalize Product Config
       run: |
         TARGET_PATH="${{ github.workspace }}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/${{ inputs.DEVICE_PATH }}"
         mkdir -p "${TARGET_PATH}"
@@ -97,36 +97,25 @@ jobs:
         
         cd "${TARGET_PATH}"
         
-        echo "Renaming Omni product makefiles and updating all tree references to twrp_beryl..."
+        echo "Creating a clean OrangeFox-compatible twrp_${{ inputs.DEVICE_NAME }}.mk..."
         
-        # Rename any omni_*.mk or fox_*.mk to twrp_beryl.mk
-        OLD_MK=$(find . -maxdepth 1 \( -name "omni_*.mk" -o -name "fox_*.mk" \) | head -n 1)
-        if [ -n "$OLD_MK" ]; then
-          mv "$OLD_MK" "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        elif [ ! -f "twrp_${{ inputs.DEVICE_NAME }}.mk" ]; then
-          # Fallback if no prefix makefile is found, pick any custom makefile or create one
-          ANY_MK=$(find . -maxdepth 1 -name "*.mk" ! -name "Android*.mk" ! -name "BoardConfig.mk" ! -name "device.mk" | head -n 1)
-          if [ -n "$ANY_MK" ]; then
-            mv "$ANY_MK" "twrp_${{ inputs.DEVICE_NAME }}.mk"
-          fi
-        fi
+        # Remove old raw makefiles to prevent duplicate or broken inheritance
+        rm -f omni_*.mk fox_*.mk twrp_*.mk
+        
+        # Write a fresh, standard OrangeFox product makefile that avoids missing vendor/omni dependencies
+        cat << EOF > "twrp_${{ inputs.DEVICE_NAME }}.mk"
+# Inherit from common recovery/orangefox product configurations
+\$(call inherit-product, vendor/recovery/config/common_recovery.mk)
 
-        # Update internal PRODUCT_NAME, PRODUCT_DEVICE, and PRODUCT_MODEL variables inside twrp_beryl.mk
-        if [ -f "twrp_${{ inputs.DEVICE_NAME }}.mk" ]; then
-          sed -i "s/PRODUCT_NAME := .*/PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}/g" "twrp_${{ inputs.DEVICE_NAME }}.mk"
-          sed -i "s/PRODUCT_DEVICE := .*/PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}/g" "twrp_${{ inputs.DEVICE_NAME }}.mk"
-          sed -i "s/PRODUCT_MODEL := .*/PRODUCT_MODEL := Xiaomi Beryl/g" "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        fi
+# Device Identification
+PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}
+PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}
+PRODUCT_MODEL := Xiaomi Beryl
 
-        # Globally replace string occurrences of omni_mgvi or old codenames across all mk, bp, and conf files in the tree
-        echo "Updating all files in the device tree to reference twrp_${{ inputs.DEVICE_NAME }}..."
-        find . -type f \( -name "*.mk" -o -name "*.bp" -o -name "*.sh" -o -name "*.cpp" -o -name "*.h" \) | while read -r file; do
-          sed -i "s/omni_mgvi_64_armv82/twrp_${{ inputs.DEVICE_NAME }}/g" "$file" || true
-          sed -i "s/omni_beryl/twrp_${{ inputs.DEVICE_NAME }}/g" "$file" || true
-          sed -i "s/mgvi_64_armv82/${{ inputs.DEVICE_NAME }}/g" "$file" || true
-        done
+# Inherit device board configuration
+include \$(LOCAL_DIR)/BoardConfig.mk
+EOF
 
-        # Re-write AndroidProducts.mk cleanly
         echo "Overwriting AndroidProducts.mk..."
         echo "PRODUCT_MAKEFILES := \$(LOCAL_DIR)/twrp_${{ inputs.DEVICE_NAME }}.mk" > "AndroidProducts.mk"
         echo "" >> "AndroidProducts.mk"
@@ -180,14 +169,14 @@ jobs:
 
         if [ "${{ inputs.MANIFEST_BRANCH }}" = "12.1" ]; then
           echo "Building for 12.1..."
-          lunch twrp_${{ inputs.DEVICE_NAME }}-eng || lunch twrp_${{ inputs.DEVICE_NAME }}-userdebug
+          lunch twrp_${{ inputs.DEVICE_NAME }}-eng \vert{}\vert{} lunch twrp_${{ inputs.DEVICE_NAME }}-userdebug
           make clean
           mka adbd ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
         fi
 
     - name: Set Release Properties
       run: |
-        echo "BUILD_DATE=$(TZ=Asia/Manila date +%Y%m%d)" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(TZ=Asia/Manila date +\%Y\%m\%d)" >> $GITHUB_ENV
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
@@ -196,7 +185,7 @@ jobs:
         files: |
           OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/*.img
           OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/*.zip
-        name: OrangeFox Recovery for ${{ inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+        name: OrangeFox Recovery for ${{ inputs.DEVICE_NAME }} //${{ env.BUILD_DATE }}
         tag_name: ${{ github.run_id }}
         body: |
           ## OrangeFox Recovery Build - ${{ inputs.RELEASE_TYPE }}
