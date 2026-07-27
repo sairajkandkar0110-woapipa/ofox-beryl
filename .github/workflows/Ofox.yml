@@ -113,6 +113,8 @@ jobs:
         echo "" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
         echo "PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
         echo "PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
+        echo "PRODUCT_BRAND := Xiaomi" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
+        echo "PRODUCT_MANUFACTURER := Xiaomi" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
         echo "PRODUCT_MODEL := Xiaomi Beryl" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
         echo "" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
         echo "include ${{ inputs.DEVICE_PATH }}/BoardConfig.mk" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
@@ -194,3 +196,4 @@ jobs:
           * **Device:** ${{ inputs.DEVICE_NAME }}
           * **Target:** `${{ inputs.BUILD_TARGET }}image`
           * **Commit:** Built from commit `${{ env.COMMIT_ID }}`
+          
