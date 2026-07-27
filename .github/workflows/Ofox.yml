@@ -165,7 +165,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         generate_release_notes: true
-        fail_on_unmatched_files: true
+        fail_on_unmatched_files: false
         files: |
           OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/*.img
           OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/*.zip
