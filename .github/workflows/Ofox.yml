@@ -72,7 +72,7 @@ jobs:
     - name: Enable CCache
       uses: actions/cache@v4
       with:
-        path: .ccache
+        path: ~/.ccache
         key: ${{ runner.os }}-ccache-${{ inputs.MANIFEST_BRANCH }}-${{ inputs.DEVICE_NAME }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-ccache-${{ inputs.MANIFEST_BRANCH }}-${{ inputs.DEVICE_NAME }}-
@@ -142,7 +142,8 @@ jobs:
 
     - name: Building OrangeFox & adbd
       run: |
-        export CCACHE_DIR=${GITHUB_WORKSPACE}/.ccache
+        mkdir -p ~/.ccache
+        export CCACHE_DIR=~/.ccache
         export USE_CCACHE=1
         export CCACHE_EXEC=$(which ccache)
         ccache -M 8G
