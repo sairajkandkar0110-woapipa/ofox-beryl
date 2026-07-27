@@ -104,24 +104,22 @@ jobs:
           echo "# Fallback Omni common config" > "${FOX_ROOT}/vendor/omni/config/common.mk"
         fi
 
-        echo "Creating a clean product makefile for twrp_${{ inputs.DEVICE_NAME }}..."
+        echo "Creating product makefile for twrp_${{ inputs.DEVICE_NAME }}..."
         rm -f omni_*.mk fox_*.mk twrp_*.mk
         
-        cat << 'EOF' > "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        # Inherit from Omni/OrangeFox common recovery configurations
-        $(call inherit-product, vendor/omni/config/common.mk)
+        # Write clean product makefile using direct DEVICE_PATH reference for BoardConfig.mk
+        cat << EOF > "twrp_${{ inputs.DEVICE_NAME }}.mk"
+# Inherit from Omni/OrangeFox common recovery configurations
+\$(call inherit-product, vendor/omni/config/common.mk)
 
-        # Device Identification
-        PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}
-        PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}
-        PRODUCT_MODEL := Xiaomi Beryl
+# Device Identification
+PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}
+PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}
+PRODUCT_MODEL := Xiaomi Beryl
 
-        # Inherit device board configuration
-        include $(LOCAL_DIR)/BoardConfig.mk
-        EOF
-
-        # Clean up any leading spaces inside the generated makefile block
-        sed -i 's/^[ \t]*//' "twrp_${{ inputs.DEVICE_NAME }}.mk"
+# Inherit device board configuration directly from device path
+include ${{ inputs.DEVICE_PATH }}/BoardConfig.mk
+EOF
 
         echo "Overwriting AndroidProducts.mk..."
         echo "PRODUCT_MAKEFILES := \$(LOCAL_DIR)/twrp_${{ inputs.DEVICE_NAME }}.mk" > "AndroidProducts.mk"
@@ -200,4 +198,3 @@ jobs:
           * **Device:** ${{ inputs.DEVICE_NAME }}
           * **Target:** `${{ inputs.BUILD_TARGET }}image`
           * **Commit:** Built from commit `${{ env.COMMIT_ID }}`
-          
