@@ -110,7 +110,7 @@ jobs:
         # Write clean product makefile using direct DEVICE_PATH reference for BoardConfig.mk
         cat << EOF > "twrp_${{ inputs.DEVICE_NAME }}.mk"
 # Inherit from Omni/OrangeFox common recovery configurations
-\$(call inherit-product, vendor/omni/config/common.mk)
+$(call inherit-product, vendor/omni/config/common.mk)
 
 # Device Identification
 PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}
