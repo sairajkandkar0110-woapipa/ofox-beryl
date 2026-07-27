@@ -89,7 +89,7 @@ jobs:
           repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc --all) external/guava external/gflags
         fi
 
-    - name: Move Device Tree & Normalize Product Config
+    - name: Move Device Tree to Build Space
       run: |
         FOX_ROOT="${{ github.workspace }}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}"
         TARGET_PATH="${FOX_ROOT}/${{ inputs.DEVICE_PATH }}"
@@ -98,31 +98,11 @@ jobs:
         echo "Copying repository tree files to build target..."
         rsync -av --exclude='.git' --exclude='.github' --exclude='OrangeFox' ./ "${TARGET_PATH}/"
 
-        cd "${TARGET_PATH}"
-
-        echo "Ensuring vendor/omni/config directory exists in build tree..."
+        echo "Ensuring vendor/omni/config directory exists in build tree to prevent inheritance errors..."
         mkdir -p "${FOX_ROOT}/vendor/omni/config"
         if [ ! -f "${FOX_ROOT}/vendor/omni/config/common.mk" ]; then
           echo "# Fallback Omni common config" > "${FOX_ROOT}/vendor/omni/config/common.mk"
         fi
-
-        echo "Creating product makefile for twrp_${{ inputs.DEVICE_NAME }}..."
-        rm -f omni_*.mk fox_*.mk twrp_*.mk
-
-        echo '$(call inherit-product, vendor/omni/config/common.mk)' > "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "PRODUCT_NAME := twrp_${{ inputs.DEVICE_NAME }}" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "PRODUCT_DEVICE := ${{ inputs.DEVICE_NAME }}" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "PRODUCT_BRAND := Xiaomi" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "PRODUCT_MANUFACTURER := Xiaomi" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "PRODUCT_MODEL := Xiaomi Beryl" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-        echo "include ${{ inputs.DEVICE_PATH }}/BoardConfig.mk" >> "twrp_${{ inputs.DEVICE_NAME }}.mk"
-
-        echo "Overwriting AndroidProducts.mk..."
-        echo "PRODUCT_MAKEFILES := \$(LOCAL_DIR)/twrp_${{ inputs.DEVICE_NAME }}.mk" > "AndroidProducts.mk"
-        echo "" >> "AndroidProducts.mk"
-        echo "COMMON_LUNCH_CHOICES := twrp_${{ inputs.DEVICE_NAME }}-eng twrp_${{ inputs.DEVICE_NAME }}-userdebug" >> "AndroidProducts.mk"
 
         echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
