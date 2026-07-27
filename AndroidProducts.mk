@@ -6,9 +6,8 @@
 #
 
 PRODUCT_MAKEFILES := \
-    $(LOCAL_DIR)/omni_mgvi_64_armv82.mk
+    $(LOCAL_DIR)/twrp_beryl.mk
 
 COMMON_LUNCH_CHOICES := \
-    omni_mgvi_64_armv82-user \
-    omni_mgvi_64_armv82-userdebug \
-    omni_mgvi_64_armv82-eng
+    twrp_beryl-eng \
+    twrp_beryl-userdebug
